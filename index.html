@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#07151b">
+    <title>Пепел: Эхо маяка</title>
+    <script src="libs/simplex-noise.js?v=0.2.1"></script>
+    <script src="libs/babylon.js?v=0.2.1"></script>
+    <script src="libs/babylonjs.loaders.min.js?v=0.2.1"></script>
+    <style>
+        :root { color-scheme: dark; }
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background: #071116; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        #world3d { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+        #loading-screen {
+            position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px;
+            background: radial-gradient(circle at 50% 45%, #17313a, #071116 65%); z-index: 1000;
+        }
+        .loading-eyebrow { color: #e8c786; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; }
+        .loading-text { font: 13px system-ui, sans-serif; color: #c8d9d8; text-align: center; min-height: 1em; }
+        .loading-bar { width: min(250px, 70vw); height: 5px; background: #1e3941; border-radius: 5px; overflow: hidden; }
+        .loading-progress { height: 100%; width: 0%; background: linear-gradient(90deg, #c7864b, #f4d98d); transition: width .35s ease; }
+
+        #title-screen {
+            position: fixed; inset: 0; z-index: 100; overflow: hidden; opacity: 1; pointer-events: auto;
+            transition: opacity .8s ease, visibility .8s ease;
+            background: #071116;
+        }
+        #title-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        #title-art { position: absolute; inset: -2%; background: url('assets/ui/ashfall-cover.jpg?v=0.2.1') center center / cover no-repeat; filter: saturate(.86) contrast(1.06); transform: scale(1.02); }
+        #title-screen::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3, 10, 14, .96) 0%, rgba(4, 14, 19, .7) 36%, rgba(4, 12, 15, .12) 72%, rgba(3, 8, 11, .3) 100%), linear-gradient(0deg, rgba(2, 8, 11, .72), transparent 45%); }
+        .title-content { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; width: min(610px, 92vw); height: 100%; padding: 7vh 7vw; }
+        .eyebrow { margin: 0 0 16px; color: #d8b56f; font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+        h1 { margin: 0; max-width: 560px; color: #f3eee0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(44px, 7vw, 80px); font-weight: 500; letter-spacing: -.045em; line-height: .86; text-transform: uppercase; text-shadow: 0 2px 18px #000; }
+        h1 span { display: block; color: #dfb568; font-size: .45em; letter-spacing: .09em; line-height: 1.45; }
+        .title-rule { width: 64px; height: 2px; margin: 27px 0 19px; background: #dcad5d; box-shadow: 0 0 16px #dcad5d; }
+        .logline { max-width: 470px; margin: 0 0 27px; color: #d5e2dc; font-family: Georgia, "Times New Roman", serif; font-size: clamp(16px, 2vw, 20px); font-style: italic; line-height: 1.45; text-shadow: 0 1px 4px #000; }
+        .start-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        #start-game, #mute-game {
+            border: 1px solid rgba(245, 219, 157, .72); border-radius: 3px; cursor: pointer; color: #fff6df;
+            background: rgba(165, 103, 49, .78); box-shadow: 0 8px 30px rgba(0,0,0,.28); font: 700 12px/1 system-ui, sans-serif;
+            letter-spacing: .13em; text-transform: uppercase; transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+        #start-game { padding: 16px 23px; }
+        #mute-game { padding: 13px 14px; background: rgba(8, 22, 27, .72); border-color: rgba(188, 222, 221, .4); }
+        #start-game:hover, #mute-game:hover { transform: translateY(-2px); background: #bd7a3c; box-shadow: 0 12px 32px rgba(0,0,0,.42); }
+        .title-fineprint { margin: 22px 0 0; color: #91acad; font-size: 10px; letter-spacing: .05em; line-height: 1.7; }
+        .story-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 26px; }
+        .story-pills span { padding: 6px 9px; border: 1px solid rgba(178, 213, 211, .25); border-radius: 999px; color: #bed0ca; background: rgba(5, 17, 22, .38); font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
+        #credit { position: absolute; z-index: 2; right: 28px; bottom: 23px; color: rgba(220, 236, 230, .65); font-size: 10px; letter-spacing: .08em; text-align: right; line-height: 1.5; }
+        @media (max-width: 680px) {
+            #title-art { background-position: 60% center; } .title-content { justify-content: flex-end; padding: 0 7vw 10vh; }
+            h1 { font-size: 49px; } .logline { font-size: 16px; } #credit { display: none; }
+        }
+
+        /* Touch layout for phones such as Poco F4. The controls are only activated by Game.js
+           on a coarse-pointer device; desktop keeps the clean keyboard HUD. */
+        #touch-controls, #orientation-note { display: none; }
+        #touch-controls {
+            position: fixed; inset: 0; z-index: 30; pointer-events: none; touch-action: none;
+            -webkit-user-select: none; user-select: none;
+        }
+        #touch-controls.is-active { display: block; }
+        #touch-look-zone { position: absolute; inset: 0 0 0 42%; z-index: 1; pointer-events: auto; touch-action: none; }
+        #touch-move {
+            position: absolute; z-index: 3; left: max(18px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom));
+            width: 132px; height: 132px; border: 2px solid rgba(204, 235, 230, .36); border-radius: 50%;
+            background: radial-gradient(circle, rgba(38, 83, 87, .25), rgba(4, 18, 23, .4));
+            box-shadow: inset 0 0 20px rgba(105, 223, 222, .08), 0 8px 24px rgba(0,0,0,.26); pointer-events: auto; touch-action: none;
+        }
+        #touch-move::after { content: "ДВИЖЕНИЕ"; position: absolute; left: 0; right: 0; top: 54px; color: rgba(224, 246, 239, .46); font-size: 8px; font-weight: 700; letter-spacing: .12em; text-align: center; }
+        #touch-stick { position: absolute; left: 38px; top: 38px; width: 52px; height: 52px; border-radius: 50%; background: rgba(154, 223, 218, .38); border: 1px solid rgba(231, 255, 248, .8); box-shadow: 0 0 18px rgba(104, 228, 225, .22); transform: translate(0, 0); }
+        #touch-actions { position: absolute; z-index: 3; right: max(15px, env(safe-area-inset-right)); bottom: max(17px, env(safe-area-inset-bottom)); width: 220px; height: 165px; pointer-events: none; }
+        .touch-button {
+            position: absolute; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+            border: 1px solid rgba(218, 239, 233, .55); border-radius: 50%; color: #f4fcf7; background: rgba(9, 31, 37, .74);
+            box-shadow: 0 5px 18px rgba(0,0,0,.32), inset 0 0 12px rgba(113, 226, 221, .08); font: 700 10px/1 system-ui, sans-serif;
+            letter-spacing: .04em; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent;
+        }
+        .touch-button:active, .touch-button.is-held { transform: scale(.93); background: rgba(174, 112, 55, .85); border-color: #ffcf85; }
+        #touch-interact { right: 0; bottom: 38px; width: 83px; height: 83px; font-size: 15px; background: rgba(176, 109, 49, .78); border-color: rgba(255, 216, 151, .85); }
+        #touch-pulse { right: 81px; bottom: 93px; width: 57px; height: 57px; color: #bff7f6; }
+        #touch-lure { right: 91px; bottom: 3px; width: 54px; height: 54px; color: #eed0fa; }
+        #touch-sprint { left: 6px; bottom: 32px; width: 54px; height: 54px; color: #ffd58d; }
+        #touch-crouch { left: 59px; bottom: 0; width: 50px; height: 50px; color: #caeee4; }
+        #touch-status { position: absolute; z-index: 4; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); color: #e9f3ef; text-align: right; font: 700 11px/1.55 system-ui, sans-serif; letter-spacing: .05em; text-shadow: 0 1px 3px #000; pointer-events: none; }
+        #touch-status .touch-subtle { color: #a8c4c2; font-size: 8px; font-weight: 600; }
+        @media (pointer: coarse) {
+            .arc-ui [data-ui="controlsPanel"], .arc-ui [data-ui="controls"],
+            .arc-ui [data-ui="vitalsPanel"], .arc-ui [data-ui="healthLabel"], .arc-ui [data-ui="health"],
+            .arc-ui [data-ui="staminaLabel"], .arc-ui [data-ui="stamina"], .arc-ui [data-ui="pulseLabel"],
+            .arc-ui [data-ui="pulse"], .arc-ui [data-ui="noiseLabel"], .arc-ui [data-ui="noise"],
+            .arc-ui [data-ui="inventoryPanel"], .arc-ui [data-ui="cells"], .arc-ui [data-ui="lures"] { display: none !important; }
+            .arc-ui [data-ui="interactionPanel"] { bottom: 127px !important; width: 330px !important; }
+            .arc-ui [data-ui="interaction"] { bottom: 138px !important; font-size: 12px !important; }
+            .arc-ui [data-ui="dialoguePanel"] { left: 178px !important; bottom: 25px !important; width: 390px !important; height: 84px !important; }
+            .arc-ui [data-ui="dialogueLine"] { height: 84px !important; }
+            .arc-ui [data-ui="dialogueText"] { font-size: 13px !important; }
+            .arc-ui [data-ui="dialogueHint"] { display: none !important; }
+            .arc-ui [data-ui="brand"] { font-size: 9px !important; }
+            .arc-ui [data-ui="chapter"] { font-size: 14px !important; }
+            .arc-ui [data-ui="objectivePanel"] { width: 285px !important; height: 51px !important; }
+            .arc-ui [data-ui="objective"] { font-size: 12px !important; }
+        }
+        @media (pointer: coarse) and (orientation: portrait) {
+            #orientation-note { position: fixed; z-index: 1101; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; background: rgba(4, 16, 20, .94); color: #edf6ef; text-align: center; font: 700 16px/1.35 system-ui, sans-serif; letter-spacing: .03em; }
+            #orientation-note span { color: #d7b46d; font-size: 41px; transform: rotate(90deg); }
+            #orientation-note small { max-width: 240px; color: #a4c3c0; font-size: 12px; font-weight: 500; }
+            #touch-controls { display: none !important; }
+        }
+        @media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+            #touch-move { width: 112px; height: 112px; }
+            #touch-move::after { top: 46px; }
+            #touch-stick { left: 30px; top: 30px; width: 48px; height: 48px; }
+            #touch-actions { transform: scale(.88); transform-origin: bottom right; }
+            #touch-status { font-size: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="world3d" aria-label="3D игровая сцена"></canvas>
+
+
+    <div id="touch-controls" aria-hidden="true">
+        <div id="touch-look-zone" aria-label="Поворот камеры"></div>
+        <div id="touch-status"><span id="touch-hp">♥ 100% · ЯЧЕЙКИ 0/3</span><br><span class="touch-subtle">ПРОВЕДИТЕ СПРАВА — КАМЕРА</span></div>
+        <div id="touch-move" aria-label="Движение"><span id="touch-stick"></span></div>
+        <div id="touch-actions">
+            <button id="touch-sprint" class="touch-button" type="button">БЕГ</button>
+            <button id="touch-crouch" class="touch-button" type="button">ТИХО</button>
+            <button id="touch-pulse" class="touch-button" type="button">Q</button>
+            <button id="touch-lure" class="touch-button" type="button">F</button>
+            <button id="touch-interact" class="touch-button" type="button">E</button>
+        </div>
+    </div>
+    <div id="orientation-note"><span>▭</span><strong>Поверните телефон</strong><small>Для управления и широкого обзора играйте в горизонтальном режиме.</small></div>
+
+    <section id="title-screen" aria-label="Главное меню">
+        <div id="title-art"></div>
+        <div class="title-content">
+            <p class="eyebrow">Интерактивный пролог · ArcEngine</p>
+            <h1>ПЕПЕЛ<span>ЭХО МАЯКА</span></h1>
+            <div class="title-rule"></div>
+            <p class="logline">«В долине, где любой громкий звук зовёт Тишину, один старый маяк снова просит ответить.»</p>
+            <div class="start-row">
+                <button id="start-game" type="button">Начать пролог</button>
+                <button id="mute-game" type="button" aria-pressed="false">Звук: вкл</button>
+            </div>
+            <p class="title-fineprint">Оригинальная survival-adventure история. Исследуйте, слушайте, не шумите.</p>
+            <div class="story-pills"><span>Стелс</span><span>Исследование</span><span>Выбор маршрута</span><span>Сигналы</span></div>
+        </div>
+        <div id="credit">ПЕПЕЛ: ЭХО МАЯКА<br>вертикальный срез · v0.2.1</div>
+    </section>
+
+    <div id="loading-screen">
+        <div class="loading-eyebrow">Настраиваем приёмник</div>
+        <div class="loading-bar"><div class="loading-progress"></div></div>
+        <div class="loading-text">Собираем тихую долину…</div>
+    </div>
+
+    <!-- Order matters: Constants.js first, main.js last. -->
+    <script src="js/Constants.js?v=0.2.1"></script>
+    <script src="js/Objects.js?v=0.2.1"></script>
+    <script src="js/UILayout.js?v=0.2.1"></script>
+    <script src="js/Sound3D.js?v=0.2.1"></script>
+    <script src="js/World3D.js?v=0.2.1"></script>
+    <script src="js/Terrain3D.js?v=0.2.1"></script>
+    <script src="js/CameraControl.js?v=0.2.1"></script>
+    <script src="js/Model3D.js?v=0.2.1"></script>
+    <script src="js/Gltf3D.js?v=0.2.1"></script>
+    <script src="js/Instances3D.js?v=0.2.1"></script>
+    <script src="js/Location3D.js?v=0.2.1"></script>
+    <script src="js/Debug3D.js?v=0.2.1"></script>
+    <script src="js/UI.js?v=0.2.1"></script>
+    <script src="js/Game.js?v=0.2.1"></script>
+    <script src="js/main.js?v=0.2.1"></script>
+    <script>document.addEventListener('contextmenu', e => e.preventDefault());</script>
+</body>
+</html>
